@@ -1,0 +1,17 @@
+{
+  "name": "MarkFlow Editor",
+  "short_name": "MarkFlow",
+  "description": "Award-winning Markdown Editor",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'%3E%3Cpath d='M4 19h16v-2H4v2zm16-6l-2.5-3.5L14 13.5 10 8 4 16h16z'/%3E%3C/svg%3E",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
