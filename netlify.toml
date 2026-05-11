@@ -13,11 +13,6 @@
     Cache-Control = "no-cache, no-store, must-revalidate"
 
 [[redirects]]
-  from = "/assets/*"
-  status = 404
-  force = true
-
-[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
