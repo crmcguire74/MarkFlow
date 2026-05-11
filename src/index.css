@@ -207,3 +207,40 @@ body {
 .editor-textarea:focus {
   outline: none;
 }
+
+@media print {
+  body {
+    background: transparent !important;
+    color: black !important;
+  }
+  header, footer, nav, .print-hidden {
+    display: none !important;
+  }
+  #root, .app-container {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  .markdown-body {
+    color: black !important;
+    min-height: auto !important;
+    height: auto !important;
+  }
+  .markdown-body a {
+    color: blue !important;
+  }
+  /* Hide textarea if it exists */
+  textarea.editor-textarea {
+    display: none !important;
+  }
+  /* Show only visual output if we are using split pane */
+  .preview-pane-print {
+    display: block !important;
+    width: 100% !important;
+  }
+  .flex, .flex-1, .h-screen {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+}

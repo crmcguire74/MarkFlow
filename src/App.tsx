@@ -5,6 +5,7 @@ import { cn } from "./lib/utils";
 import {
   Download,
   Save,
+  Printer,
   FilePlus,
   HelpCircle,
   Moon,
@@ -23,12 +24,15 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { marked } from "marked";
 import TurndownService from "turndown";
+// @ts-ignore
+import { tables } from "turndown-plugin-gfm";
 import { useRegisterSW } from "virtual:pwa-register/react";
 
 const turndownService = new TurndownService({
   headingStyle: "atx",
   codeBlockStyle: "fenced",
 });
+turndownService.use(tables);
 
 turndownService.addRule("strikethrough", {
   filter: ["del", "s", "strike"] as any,
@@ -99,7 +103,10 @@ export default function App() {
   const [content, setContent] = useState(DEFAULT_DOC);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [activeEditor, setActiveEditor] = useState<ActiveEditor>("markdown");
-  const [theme, setTheme] = useState<Theme>("dark"); // Let's default to dark for the polished feel
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem("theme");
+    return (saved as Theme) || "light";
+  });
   const [showHelp, setShowHelp] = useState(false);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
 
@@ -157,6 +164,7 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.className = theme;
+    localStorage.setItem("theme", theme);
   }, [theme]);
 
   // PWA Install prompt listener
@@ -601,7 +609,11 @@ export default function App() {
     setFileName(file.name);
     const reader = new FileReader();
     reader.onload = (event) => {
-      setContent((event.target?.result as string) || "");
+      const newContent = (event.target?.result as string) || "";
+      setContent(newContent);
+      if (formatRef.current) {
+        formatRef.current.innerHTML = marked.parse(newContent) as string;
+      }
       setActiveFormats([]);
     };
     reader.readAsText(file);
@@ -653,7 +665,7 @@ export default function App() {
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
                     viewMode === "markdown"
-                      ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
+                      ? "bg-[var(--brand-600)]/10 text-[var(--brand-600)] shadow-sm border border-[var(--brand-600)]/20"
                       : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
                   )}
                 >
@@ -664,7 +676,7 @@ export default function App() {
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all hidden md:flex",
                     viewMode === "split"
-                      ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
+                      ? "bg-[var(--brand-600)]/10 text-[var(--brand-600)] shadow-sm border border-[var(--brand-600)]/20"
                       : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
                   )}
                 >
@@ -678,7 +690,7 @@ export default function App() {
                   className={cn(
                     "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
                     viewMode === "format"
-                      ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
+                      ? "bg-[var(--brand-600)]/10 text-[var(--brand-600)] shadow-sm border border-[var(--brand-600)]/20"
                       : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
                   )}
                 >
@@ -718,6 +730,14 @@ export default function App() {
                 >
                   <Save size={16} />
                   <span className="hidden lg:inline">Save</span>
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  title="Print"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
+                >
+                  <Printer size={16} />
+                  <span className="hidden lg:inline">Print</span>
                 </button>
 
                 <div className="h-4 w-[1px] bg-[var(--border-subtle)] mx-2" />
@@ -790,20 +810,20 @@ export default function App() {
           className="flex-1 flex overflow-hidden relative border-t border-[var(--border-subtle)]"
         >
           {/* Editor Pane (Markdown view) */}
-          {(viewMode === "markdown" || viewMode === "split") && (
-            <section
-              style={{ width: viewMode === "split" ? `${leftWidth}%` : "100%" }}
-              className={cn(
-                "flex flex-col h-full bg-[var(--bg-base)] transition-colors duration-300",
-                viewMode === "split" && "flex-none",
-                activeEditor === "markdown" && viewMode === "split"
-                  ? "ring-2 ring-[var(--brand-600)]/30 ring-inset"
-                  : "",
-              )}
-              onClick={() =>
-                viewMode === "split" && setActiveEditor("markdown")
-              }
-            >
+          <section
+            style={{ width: viewMode === "split" ? `${leftWidth}%` : "100%" }}
+            className={cn(
+              "flex flex-col h-full bg-[var(--bg-base)] transition-colors duration-300 print-hidden",
+              viewMode === "format" ? "hidden" : "flex",
+              viewMode === "split" && "flex-none",
+              activeEditor === "markdown" && viewMode === "split"
+                ? "ring-2 ring-[var(--brand-600)]/30 ring-inset"
+                : "",
+            )}
+            onClick={() =>
+              viewMode === "split" && setActiveEditor("markdown")
+            }
+          >
               <div className="flex-1 overflow-hidden relative">
                 <textarea
                   ref={textareaRef}
@@ -822,35 +842,36 @@ export default function App() {
                   placeholder="Start typing your markdown here..."
                 />
               </div>
-            </section>
-          )}
+          </section>
 
           {/* Resizer Handler */}
-          {viewMode === "split" && (
-            <div
-              className="w-3 mx-[-1.5px] cursor-col-resize flex justify-center items-center z-30 group"
-              onMouseDown={() => setIsResizing(true)}
-              title="Drag to resize panels"
-            >
-              <div className="w-[1px] h-full bg-[var(--border-subtle)] group-hover:bg-[var(--brand-600)] group-hover:w-[3px] group-active:bg-[var(--brand-600)] group-active:w-[3px] transition-all"></div>
-            </div>
-          )}
+          <div
+            className={cn(
+              "w-3 mx-[-1.5px] cursor-col-resize flex justify-center items-center z-30 group print-hidden",
+              viewMode !== "split" && "hidden"
+            )}
+            onMouseDown={() => setIsResizing(true)}
+            title="Drag to resize panels"
+          >
+            <div className="w-[1px] h-full bg-[var(--border-subtle)] group-hover:bg-[var(--brand-600)] group-hover:w-[3px] group-active:bg-[var(--brand-600)] group-active:w-[3px] transition-all"></div>
+          </div>
 
           {/* Format Pane (Preview / WYSIWYG) */}
-          {(viewMode === "format" || viewMode === "split") && (
-            <section
-              style={{
-                width: viewMode === "split" ? `${100 - leftWidth}%` : "100%",
-              }}
-              className={cn(
-                "flex flex-col h-full overflow-y-auto bg-[var(--bg-surface)] backdrop-blur-md transition-colors duration-300 shadow-[-4px_0_24px_rgba(0,0,0,0.04)]",
-                viewMode === "split" && "flex-none",
-                activeEditor === "format" && viewMode === "split"
-                  ? "ring-2 ring-[var(--brand-600)]/30 ring-inset"
-                  : "",
-              )}
-              onClick={() => viewMode === "split" && setActiveEditor("format")}
-            >
+          <section
+            style={{
+              width: viewMode === "split" ? `${100 - leftWidth}%` : "100%",
+            }}
+            className={cn(
+              "flex flex-col h-full overflow-y-auto bg-[var(--bg-surface)] backdrop-blur-md transition-colors duration-300 shadow-[-4px_0_24px_rgba(0,0,0,0.04)]",
+              viewMode === "markdown" ? "hidden" : "flex",
+              viewMode === "split" && "flex-none",
+              activeEditor === "format" && viewMode === "split"
+                ? "ring-2 ring-[var(--brand-600)]/30 ring-inset"
+                : "",
+              "preview-pane-print"
+            )}
+            onClick={() => viewMode === "split" && setActiveEditor("format")}
+          >
               <div
                 className={cn(
                   "p-8 lg:p-12 h-full min-h-[100%] flex-1",
@@ -870,7 +891,6 @@ export default function App() {
                 />
               </div>
             </section>
-          )}
         </main>
 
         {/* Status Bar */}
