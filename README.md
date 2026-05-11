@@ -5,18 +5,21 @@
 MarkFlow Editor is an award-winning Markdown editor designed for speed, clarity, and reliability. Acting as a rich-text to Markdown converter with advanced real-time previews, it supports standard Markdown alongside GitHub Flavored Markdown (GFM) features. MarkFlow's interface provides a calm, focused writing workspace, empowering creators, developers, and writers alike to formulate and shape context precisely.
 
 ## Features Supported
-
 - **Real-Time Synchronized Editing & Preview**: See the Markdown output immediately as you type, with scroll synchronization preventing you from ever losing your place.
 - **Rich Text Toolbar**: Quickly insert headings, bold, italics, quotes, links, images, tables, and code blocks using standard shortcuts and visual tools.
+- **Table Navigation**: Using the `TAB` key inside tables intelligently jumps to the next cell or generates a new row if you are at the end, making formatting breeze.
+- **Local Image Uploads**: Insert images using an external URL, or securely upload a local image from your device. Local images are converted securely to base64 Data URLs, allowing the document to persist them fully offline without external servers.
 - **Offline Mode & PWA Capable**: Keep working when the internet cuts out. MarkFlow is highly optimized as a Progressive Web Application (PWA). You can install it directly onto your device (desktop or mobile) and write fully offline.
 - **Intelligent Updates**: MarkFlow checks in the background for new versions. When an update is available, a convenient "Update App" button pulses to seamlessly pull in enhancements.
+- **Renamable Files**: Instantly rename your documents directly in the status bar to keep tracking efficient.
 - **Dark & Light Mode**: Smooth transition between light and dark themes using a beautiful custom palette.
 - **Document Export & Download**: Export generated markdown straight to a `.md` footprint file with a single click.
 
 ## User Workflows
-
 - **Writing Workflows**: Simply type in the left editor pane. Format dynamically using standard Markdown syntax, or hit the top toolbar action buttons to auto-generate markdown markers (e.g. `**text**` for bold).
+- **Inserting Images**: Clicking the image button allows you to specify a remote source or pick a local file on your computer. When picking a local file it converts it immediately and injects a base64 URI, supporting standalone files that don't depend on servers.
 - **Installing as a Standalone App (PWA)**: If MarkFlow is opened in a compatible web browser, an "Install" button resides in the toolbar navigation. Clicking it triggers the browser's PWA install prompt. Once installed properly on the system, to prevent clutter, the "Install" button is intelligently hidden from the user interface.
+- **Managing Table Inputs**: When modifying a table from the interface, rely on hitting the `TAB` key. The editor detects your table structures and safely advances focus boundaries, and handles injecting new rows automatically for you.
 - **Updating the Application**: Periodic background polling queries for service worker updates. If the system goes offline, the app leans on local cache and functions uninterrupted silently. When an update becomes available on a network connection, a bright "Update App" button prompts the user to refresh their installed version.
 - **Saving & Exporting**: Rather than relying strictly on heavy cloud infrastructure, MarkFlow stores your document content directly in your browser's local memory. For portability, the "Download" button safely pushes the active markdown instance to your system files.
 

@@ -116,10 +116,13 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState("untitled.md");
 
-  // Link Modal State
+  // Link & Image Modal State
   const [showLinkModal, setShowLinkModal] = useState(false);
+  const [showImageModal, setShowImageModal] = useState(false);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const fileImageRef = useRef<HTMLInputElement>(null);
   const [savedSelection, setSavedSelection] = useState<{
     start: number;
     end: number;
@@ -271,7 +274,7 @@ export default function App() {
   };
 
   const handleFormat = (format: string) => {
-    if (format === "link") {
+    if (format === "link" || format === "image") {
       if (activeEditor === "markdown" && textareaRef.current) {
         setSavedSelection({
           start: textareaRef.current.selectionStart,
@@ -285,7 +288,8 @@ export default function App() {
           (window as any)._savedRange = selection.getRangeAt(0);
         }
       }
-      setShowLinkModal(true);
+      if (format === "link") setShowLinkModal(true);
+      else setShowImageModal(true);
       return;
     }
 
@@ -305,12 +309,6 @@ export default function App() {
           "insertHTML",
           false,
           "<pre><code>console.log('Hello');</code></pre><p><br></p>",
-        );
-      } else if (format === "image") {
-        document.execCommand(
-          "insertImage",
-          false,
-          "https://example.com/image.jpg",
         );
       } else if (format === "table") {
         document.execCommand(
@@ -386,6 +384,202 @@ export default function App() {
       );
     }
     setLinkUrl("");
+  };
+
+  const submitImage = (e: React.FormEvent) => {
+    e.preventDefault();
+    setShowImageModal(false);
+
+    if (activeEditor === "format" && formatRef.current) {
+      const savedRange = (window as any)._savedRange;
+      if (savedRange) {
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(savedRange);
+        document.execCommand("insertImage", false, imageUrl);
+        syncFormatToMarkdown();
+      }
+    } else if (
+      activeEditor === "markdown" &&
+      textareaRef.current &&
+      savedSelection
+    ) {
+      textareaRef.current.focus();
+      textareaRef.current.selectionStart = savedSelection.start;
+      textareaRef.current.selectionEnd = savedSelection.end;
+      insertFormat(
+        textareaRef.current,
+        "image",
+        (val) => {
+          setContent(val);
+          setTimeout(() => handleSelectionChange(), 0);
+        },
+        imageUrl,
+      );
+    }
+    setImageUrl("");
+  };
+
+  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setImageUrl(dataUrl);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleMarkdownKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Tab") {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+
+      const cursor = textarea.selectionStart;
+      const text = content;
+      
+      const lineStart = text.lastIndexOf('\n', cursor - 1) + 1;
+      let lineEnd = text.indexOf('\n', cursor);
+      if (lineEnd === -1) lineEnd = text.length;
+
+      const currentLine = text.substring(lineStart, lineEnd);
+      
+      if (currentLine.trim().startsWith('|') || currentLine.includes('|')) {
+        e.preventDefault();
+        
+        let nextPipe = text.indexOf('|', cursor);
+        
+        if (nextPipe !== -1 && nextPipe < lineEnd) {
+            let nextCursor = nextPipe + 1;
+            while(text[nextCursor] === ' ' && nextCursor < lineEnd) nextCursor++;
+            textarea.selectionStart = nextCursor;
+            textarea.selectionEnd = nextCursor;
+            handleSelectionChange();
+            return;
+        } else {
+            if (lineEnd === text.length) {
+                 const pipesCount = (currentLine.match(/\|/g) || []).length;
+                 if (pipesCount > 1) {
+                     const newRow = '\n' + '|     '.repeat(pipesCount - 1) + '|';
+                     const newText = text + newRow;
+                     setContent(newText);
+                     setTimeout(() => {
+                        textarea.selectionStart = text.length + 3;
+                        textarea.selectionEnd = text.length + 3;
+                        handleSelectionChange();
+                     }, 0);
+                 }
+                 return;
+            }
+            
+            const nextLineEnd = text.indexOf('\n', lineEnd + 1) === -1 ? text.length : text.indexOf('\n', lineEnd + 1);
+            const nextLine = text.substring(lineEnd + 1, nextLineEnd);
+            
+            if (nextLine.trim().startsWith('|') || nextLine.includes('|')) {
+               let firstPipe = text.indexOf('|', lineEnd);
+               if (firstPipe !== -1) {
+                  let nextCursor = firstPipe + 1;
+                  while(text[nextCursor] === ' ' && nextCursor < nextLineEnd) nextCursor++;
+                  textarea.selectionStart = nextCursor;
+                  textarea.selectionEnd = nextCursor;
+                  handleSelectionChange();
+               }
+            } else {
+                 const pipesCount = (currentLine.match(/\|/g) || []).length;
+                 if (pipesCount > 1) {
+                     const newRow = '\n' + '|     '.repeat(pipesCount - 1) + '|';
+                     const newText = text.substring(0, lineEnd) + newRow + text.substring(lineEnd);
+                     setContent(newText);
+                     setTimeout(() => {
+                        textarea.selectionStart = lineEnd + 3;
+                        textarea.selectionEnd = lineEnd + 3;
+                        handleSelectionChange();
+                     }, 0);
+                 }
+            }
+            return;
+        }
+      }
+    }
+    handleSelectionChange();
+  };
+
+  const handleFormatKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Tab") {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
+      
+      let node: Node | null = selection.anchorNode;
+      let td: HTMLTableCellElement | null = null;
+      let tr: HTMLTableRowElement | null = null;
+      
+      while (node && node !== formatRef.current) {
+        if (node.nodeName.toLowerCase() === 'td' || node.nodeName.toLowerCase() === 'th') {
+            td = node as HTMLTableCellElement;
+        }
+        if (node.nodeName.toLowerCase() === 'tr') {
+            tr = node as HTMLTableRowElement;
+            break;
+        }
+        node = node.parentNode;
+      }
+      
+      if (td && tr) {
+        e.preventDefault();
+        
+        let targetCell: HTMLTableCellElement | null = null;
+        
+        if (e.shiftKey) {
+            if (td.previousElementSibling) {
+                targetCell = td.previousElementSibling as HTMLTableCellElement;
+            } else if (tr.previousElementSibling) {
+                const prevRow = tr.previousElementSibling as HTMLTableRowElement;
+                if (prevRow.lastElementChild) {
+                    targetCell = prevRow.lastElementChild as HTMLTableCellElement;
+                }
+            }
+        } else {
+            if (td.nextElementSibling) {
+                targetCell = td.nextElementSibling as HTMLTableCellElement;
+            } else if (tr.nextElementSibling) {
+                const nextRow = tr.nextElementSibling as HTMLTableRowElement;
+                if (nextRow.firstElementChild) {
+                    targetCell = nextRow.firstElementChild as HTMLTableCellElement;
+                }
+            } else {
+                 const tbody = tr.parentNode;
+                 if (tbody && (tbody.nodeName.toLowerCase() === 'tbody' || tbody.nodeName.toLowerCase() === 'table')) {
+                    const newTr = document.createElement('tr');
+                    const cols = tr.children.length;
+                    for (let i = 0; i < cols; i++) {
+                        const newTd = document.createElement('td');
+                        newTd.innerHTML = '<br>';
+                        newTr.appendChild(newTd);
+                    }
+                    if (tr.nextSibling) {
+                        tbody.insertBefore(newTr, tr.nextSibling);
+                    } else {
+                        tbody.appendChild(newTr);
+                    }
+                    targetCell = newTr.firstElementChild as HTMLTableCellElement;
+                 }
+            }
+        }
+        
+        if (targetCell) {
+            const range = document.createRange();
+            range.selectNodeContents(targetCell);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            targetCell.focus();
+            
+            syncFormatToMarkdown();
+        }
+      }
+    }
   };
 
   const handleNew = () => {
@@ -618,7 +812,8 @@ export default function App() {
                     setContent(e.target.value);
                   }}
                   onSelect={handleSelectionChange}
-                  onKeyUp={handleSelectionChange}
+                  onKeyUp={handleMarkdownKeyDown}
+                  onKeyDown={handleMarkdownKeyDown}
                   onClick={handleSelectionChange}
                   autoComplete="off"
                   autoCorrect="off"
@@ -669,6 +864,7 @@ export default function App() {
                   suppressContentEditableWarning
                   onSelect={handleSelectionChange}
                   onKeyUp={handleSelectionChange}
+                  onKeyDown={handleFormatKeyDown}
                   onMouseUp={handleSelectionChange}
                   onInput={syncFormatToMarkdown}
                 />
@@ -784,6 +980,85 @@ export default function App() {
                 <button
                   type="submit"
                   className="px-5 py-2 bg-[var(--brand-600)] text-white font-medium rounded-lg hover:bg-[var(--brand-700)] transition-colors text-sm shadow-md"
+                >
+                  Insert
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* Image Modal */}
+        {showImageModal && (
+          <div className="fixed inset-0 bg-[#0f172a]/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
+            <form
+              onSubmit={submitImage}
+              className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            >
+              <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
+                <h2 className="font-semibold text-[var(--text-strong)]">
+                  Insert Image
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowImageModal(false)}
+                  className="p-1.5 text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] rounded-md transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-6 bg-[var(--bg-base)]">
+                <label className="block text-sm font-medium text-[var(--text-strong)] mb-2">
+                  Image URL
+                </label>
+                <input
+                  autoFocus
+                  type="text"
+                  placeholder="https://..."
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-[var(--bg-surface)] border border-[var(--border-subtle)] rounded-lg text-[var(--text-strong)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-600)]/50 focus:border-[var(--brand-600)] transition-all placeholder:text-[var(--text-muted)] mb-4"
+                />
+                
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-[var(--border-subtle)]"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-[var(--bg-base)] text-[var(--text-muted)]">Or</span>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-[var(--text-strong)] mb-2">
+                    Upload Local Image
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    ref={fileImageRef}
+                    onChange={handleImageFileChange}
+                    className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-2.5 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[var(--brand-600)]/10 file:text-[var(--brand-600)] hover:file:bg-[var(--brand-600)]/20 file:transition-colors cursor-pointer"
+                  />
+                  {imageUrl && imageUrl.startsWith('data:image') && (
+                    <div className="mt-4 border border-[var(--border-subtle)] rounded-lg p-2 bg-[var(--bg-surface)]">
+                      <img src={imageUrl} alt="Preview" className="max-h-32 object-contain mx-auto rounded-md" />
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="p-5 border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)] flex justify-end gap-3 rounded-b-2xl">
+                <button
+                  type="button"
+                  onClick={() => setShowImageModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!imageUrl}
+                  className="px-4 py-2 text-sm font-medium bg-[var(--brand-600)] text-white rounded-md hover:bg-[var(--brand-700)] hover:shadow-md shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Insert
                 </button>
