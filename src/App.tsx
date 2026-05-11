@@ -247,10 +247,10 @@ export default function App() {
       const formatBlock = document.queryCommandValue("formatBlock");
       if (formatBlock) {
         const block = formatBlock.toLowerCase();
-        if (block === "h1" || block === "heading 1") formats.push("h1");
-        if (block === "h2" || block === "heading 2") formats.push("h2");
-        if (block === "h3" || block === "heading 3") formats.push("h3");
-        if (block === "blockquote") formats.push("quote");
+        if (block === "h1" || block === "heading 1" || block === "<h1>") formats.push("h1");
+        if (block === "h2" || block === "heading 2" || block === "<h2>") formats.push("h2");
+        if (block === "h3" || block === "heading 3" || block === "<h3>") formats.push("h3");
+        if (block === "blockquote" || block === "<blockquote>") formats.push("quote");
       }
 
       setActiveFormats(formats);
@@ -310,7 +310,12 @@ export default function App() {
         }
       }
       syncFormatToMarkdown();
-      setTimeout(() => handleSelectionChange(), 0);
+      setTimeout(() => {
+        if (document.activeElement !== formatRef.current) {
+          formatRef.current?.focus();
+        }
+        handleSelectionChange();
+      }, 0);
       return;
     }
 

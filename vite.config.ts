@@ -24,7 +24,7 @@ export default defineConfig(({ mode }) => {
           name: "MarkFlow Editor",
           short_name: "MarkFlow",
           description: "Award-winning Markdown Editor",
-          theme_color: "#4f46e5",
+          theme_color: "#00aa4f",
           background_color: "#ffffff",
           display: "standalone",
           start_url: "/",
