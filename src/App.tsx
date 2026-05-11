@@ -14,24 +14,25 @@ import {
   Type,
   Layout,
   Columns,
-  Code
+  Code,
 } from "lucide-react";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { marked } from "marked";
 import TurndownService from "turndown";
+import { useRegisterSW } from "virtual:pwa-register/react";
 
 const turndownService = new TurndownService({
-  headingStyle: 'atx',
-  codeBlockStyle: 'fenced'
+  headingStyle: "atx",
+  codeBlockStyle: "fenced",
 });
 
-turndownService.addRule('strikethrough', {
-  filter: ['del', 's', 'strike'] as any,
+turndownService.addRule("strikethrough", {
+  filter: ["del", "s", "strike"] as any,
   replacement: function (content) {
-    return '~~' + content + '~~'
-  }
+    return "~~" + content + "~~";
+  },
 });
 
 const HELP_MD = `
@@ -99,7 +100,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>("dark"); // Let's default to dark for the polished feel
   const [showHelp, setShowHelp] = useState(false);
   const [activeFormats, setActiveFormats] = useState<string[]>([]);
-  
+
   // Custom upscale gradient / background state
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
@@ -117,7 +118,36 @@ export default function App() {
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const [savedSelection, setSavedSelection] = useState<{start: number, end: number} | null>(null);
+  const [savedSelection, setSavedSelection] = useState<{
+    start: number;
+    end: number;
+  } | null>(null);
+
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    setIsStandalone(
+      window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as any).standalone,
+    );
+    const mediaQuery = window.matchMedia("(display-mode: standalone)");
+    const handleChange = (e: MediaQueryListEvent) => setIsStandalone(e.matches);
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
+  const {
+    needRefresh: [needRefresh, setNeedRefresh],
+    updateServiceWorker,
+  } = useRegisterSW({
+    onRegistered(r) {
+      // Background checks for updates when offline may not work, as the server is unreachable.
+      // If the app checks for updates offline, it will simply fail silently and continue to serve the cached offline assets.
+    },
+    onRegisterError(error) {
+      console.log("SW registration error", error);
+    },
+  });
 
   useEffect(() => {
     document.documentElement.className = theme;
@@ -129,15 +159,19 @@ export default function App() {
       e.preventDefault();
       setDeferredPrompt(e);
     };
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    return () =>
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt,
+      );
   }, []);
 
   const handleInstallClick = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
+      if (outcome === "accepted") {
         setDeferredPrompt(null);
       }
     }
@@ -167,103 +201,120 @@ export default function App() {
 
     const handleMouseUp = () => {
       setIsResizing(false);
-      document.body.style.cursor = 'default';
-      document.body.style.userSelect = 'auto';
+      document.body.style.cursor = "default";
+      document.body.style.userSelect = "auto";
     };
 
     if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isResizing]);
 
   useEffect(() => {
-    if (formatRef.current && (activeEditor === "markdown" || formatRef.current.innerHTML === "")) {
-        formatRef.current.innerHTML = marked.parse(content) as string;
+    if (
+      formatRef.current &&
+      (activeEditor === "markdown" || formatRef.current.innerHTML === "")
+    ) {
+      formatRef.current.innerHTML = marked.parse(content) as string;
     }
   }, [content, activeEditor, viewMode]);
 
   const handleSelectionChange = useCallback(() => {
-    if (activeEditor === 'markdown' && textareaRef.current) {
-      const formats = detectActiveFormats(content, textareaRef.current.selectionStart);
+    if (activeEditor === "markdown" && textareaRef.current) {
+      const formats = detectActiveFormats(
+        content,
+        textareaRef.current.selectionStart,
+      );
       setActiveFormats(formats);
-    } else if (activeEditor === 'format') {
-       // A simplistic active format detection for contentEditable
-       const formats = [];
-       if (document.queryCommandState('bold')) formats.push('bold');
-       if (document.queryCommandState('italic')) formats.push('italic');
-       if (document.queryCommandState('strikeThrough')) formats.push('strikethrough');
-       if (document.queryCommandState('insertUnorderedList')) formats.push('ul');
-       if (document.queryCommandState('insertOrderedList')) formats.push('ol');
-       
-       const formatBlock = document.queryCommandValue('formatBlock');
-       if (formatBlock) {
-         const block = formatBlock.toLowerCase();
-         if (block === 'h1' || block === 'heading 1') formats.push('h1');
-         if (block === 'h2' || block === 'heading 2') formats.push('h2');
-         if (block === 'h3' || block === 'heading 3') formats.push('h3');
-         if (block === 'blockquote') formats.push('quote');
-       }
-       
-       setActiveFormats(formats);
+    } else if (activeEditor === "format") {
+      // A simplistic active format detection for contentEditable
+      const formats = [];
+      if (document.queryCommandState("bold")) formats.push("bold");
+      if (document.queryCommandState("italic")) formats.push("italic");
+      if (document.queryCommandState("strikeThrough"))
+        formats.push("strikethrough");
+      if (document.queryCommandState("insertUnorderedList")) formats.push("ul");
+      if (document.queryCommandState("insertOrderedList")) formats.push("ol");
+
+      const formatBlock = document.queryCommandValue("formatBlock");
+      if (formatBlock) {
+        const block = formatBlock.toLowerCase();
+        if (block === "h1" || block === "heading 1") formats.push("h1");
+        if (block === "h2" || block === "heading 2") formats.push("h2");
+        if (block === "h3" || block === "heading 3") formats.push("h3");
+        if (block === "blockquote") formats.push("quote");
+      }
+
+      setActiveFormats(formats);
     }
   }, [content, activeEditor]);
 
   const syncFormatToMarkdown = () => {
     if (formatRef.current) {
-       setContent(turndownService.turndown(formatRef.current.innerHTML));
+      setContent(turndownService.turndown(formatRef.current.innerHTML));
     }
   };
 
   const handleFormat = (format: string) => {
-    if (format === 'link') {
-      if (activeEditor === 'markdown' && textareaRef.current) {
-         setSavedSelection({
-           start: textareaRef.current.selectionStart,
-           end: textareaRef.current.selectionEnd
-         });
+    if (format === "link") {
+      if (activeEditor === "markdown" && textareaRef.current) {
+        setSavedSelection({
+          start: textareaRef.current.selectionStart,
+          end: textareaRef.current.selectionEnd,
+        });
       } else {
-         // Save the native range for contentEditable
-         const selection = window.getSelection();
-         if (selection && selection.rangeCount > 0) {
-            // (Store simplistic range in window for restoring later)
-            (window as any)._savedRange = selection.getRangeAt(0);
-         }
+        // Save the native range for contentEditable
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+          // (Store simplistic range in window for restoring later)
+          (window as any)._savedRange = selection.getRangeAt(0);
+        }
       }
       setShowLinkModal(true);
       return;
     }
-    
-    if (activeEditor === 'format' && formatRef.current) {
-       // WYSIWYG commands
-       if (format === 'bold') document.execCommand('bold', false, undefined);
-       else if (format === 'italic') document.execCommand('italic', false, undefined);
-       else if (format === 'strikethrough') document.execCommand('strikeThrough', false, undefined);
-       else if (format === 'ul') document.execCommand('insertUnorderedList', false, undefined);
-       else if (format === 'ol') document.execCommand('insertOrderedList', false, undefined);
-       else if (format.startsWith('h') || format === 'quote') {
-           const currentBlock = document.queryCommandValue('formatBlock')?.toLowerCase();
-           const targetBlock = format === 'quote' ? 'blockquote' : format;
-           // In Safari/Firefox, it might be 'heading 1', in Chrome 'h1'
-           if (currentBlock === targetBlock || currentBlock === (format === 'quote' ? 'blockquote' : `heading ${format[1]}`)) {
-               document.execCommand('formatBlock', false, 'P');
-           } else {
-               document.execCommand('formatBlock', false, targetBlock.toUpperCase());
-           }
-       }
-       syncFormatToMarkdown();
-       setTimeout(() => handleSelectionChange(), 0);
-       return;
+
+    if (activeEditor === "format" && formatRef.current) {
+      // WYSIWYG commands
+      if (format === "bold") document.execCommand("bold", false, undefined);
+      else if (format === "italic")
+        document.execCommand("italic", false, undefined);
+      else if (format === "strikethrough")
+        document.execCommand("strikeThrough", false, undefined);
+      else if (format === "ul")
+        document.execCommand("insertUnorderedList", false, undefined);
+      else if (format === "ol")
+        document.execCommand("insertOrderedList", false, undefined);
+      else if (format.startsWith("h") || format === "quote") {
+        const currentBlock = document
+          .queryCommandValue("formatBlock")
+          ?.toLowerCase();
+        const targetBlock = format === "quote" ? "blockquote" : format;
+        // In Safari/Firefox, it might be 'heading 1', in Chrome 'h1'
+        if (
+          currentBlock === targetBlock ||
+          currentBlock ===
+            (format === "quote" ? "blockquote" : `heading ${format[1]}`)
+        ) {
+          document.execCommand("formatBlock", false, "P");
+        } else {
+          document.execCommand("formatBlock", false, targetBlock.toUpperCase());
+        }
+      }
+      syncFormatToMarkdown();
+      setTimeout(() => handleSelectionChange(), 0);
+      return;
     }
 
-    if (activeEditor === 'markdown' && textareaRef.current) {
+    if (activeEditor === "markdown" && textareaRef.current) {
       insertFormat(textareaRef.current, format, (val) => {
         setContent(val);
         setTimeout(() => handleSelectionChange(), 0);
@@ -274,24 +325,33 @@ export default function App() {
   const submitLink = (e: React.FormEvent) => {
     e.preventDefault();
     setShowLinkModal(false);
-    
-    if (activeEditor === 'format' && formatRef.current) {
-       const savedRange = (window as any)._savedRange;
-       if (savedRange) {
-           const sel = window.getSelection();
-           sel?.removeAllRanges();
-           sel?.addRange(savedRange);
-           document.execCommand('createLink', false, linkUrl);
-           syncFormatToMarkdown();
-       }
-    } else if (activeEditor === 'markdown' && textareaRef.current && savedSelection) {
+
+    if (activeEditor === "format" && formatRef.current) {
+      const savedRange = (window as any)._savedRange;
+      if (savedRange) {
+        const sel = window.getSelection();
+        sel?.removeAllRanges();
+        sel?.addRange(savedRange);
+        document.execCommand("createLink", false, linkUrl);
+        syncFormatToMarkdown();
+      }
+    } else if (
+      activeEditor === "markdown" &&
+      textareaRef.current &&
+      savedSelection
+    ) {
       textareaRef.current.focus();
       textareaRef.current.selectionStart = savedSelection.start;
       textareaRef.current.selectionEnd = savedSelection.end;
-      insertFormat(textareaRef.current, 'link', (val) => {
-        setContent(val);
-        setTimeout(() => handleSelectionChange(), 0);
-      }, linkUrl);
+      insertFormat(
+        textareaRef.current,
+        "link",
+        (val) => {
+          setContent(val);
+          setTimeout(() => handleSelectionChange(), 0);
+        },
+        linkUrl,
+      );
     }
     setLinkUrl("");
   };
@@ -335,7 +395,12 @@ export default function App() {
   };
 
   return (
-    <div className={cn("h-screen w-full flex flex-col overflow-hidden transition-colors duration-300", theme)}>
+    <div
+      className={cn(
+        "h-screen w-full flex flex-col overflow-hidden transition-colors duration-300",
+        theme,
+      )}
+    >
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="flex-none h-16 px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] backdrop-blur-md flex items-center justify-between z-20 shadow-sm transition-colors duration-300">
@@ -346,13 +411,16 @@ export default function App() {
           {/* View Toggles & Actions */}
           <div className="flex items-center space-x-4">
             <div className="flex bg-[var(--bg-elevated)] p-1 rounded-lg border border-[var(--border-subtle)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-               <button
-                onClick={() => { setViewMode("markdown"); setActiveEditor("markdown"); }}
+              <button
+                onClick={() => {
+                  setViewMode("markdown");
+                  setActiveEditor("markdown");
+                }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
                   viewMode === "markdown"
                     ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
                 )}
               >
                 <Code size={14} className="hidden sm:inline-block" /> Markup
@@ -363,24 +431,27 @@ export default function App() {
                   "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all hidden md:flex",
                   viewMode === "split"
                     ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
                 )}
               >
                 <Columns size={14} className="hidden lg:inline-block" /> Split
               </button>
               <button
-                onClick={() => { setViewMode("format"); setActiveEditor("format"); }}
+                onClick={() => {
+                  setViewMode("format");
+                  setActiveEditor("format");
+                }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
                   viewMode === "format"
                     ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent"
+                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
                 )}
               >
                 <Type size={14} className="hidden sm:inline-block" /> Format
               </button>
             </div>
-            
+
             {/* File Operations */}
             <div className="flex items-center space-x-1">
               <button
@@ -417,19 +488,31 @@ export default function App() {
 
               <div className="h-4 w-[1px] bg-[var(--border-subtle)] mx-2" />
 
-              <button
-                onClick={() => {
-                  if (deferredPrompt) {
-                    handleInstallClick();
-                  } else {
-                    setShowInstallHelp(true);
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--brand-600)] hover:bg-[var(--brand-600)]/10 transition-colors"
-              >
-                <Download size={16} />
-                <span className="hidden lg:inline">Install</span>
-              </button>
+              {needRefresh ? (
+                <button
+                  onClick={() => updateServiceWorker(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-[var(--brand-600)] text-white hover:bg-[var(--brand-700)] transition-colors animate-pulse"
+                >
+                  <Download size={16} />
+                  <span className="hidden lg:inline">Update App</span>
+                </button>
+              ) : (
+                !isStandalone && (
+                  <button
+                    onClick={() => {
+                      if (deferredPrompt) {
+                        handleInstallClick();
+                      } else {
+                        setShowInstallHelp(true);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--brand-600)] hover:bg-[var(--brand-600)]/10 transition-colors"
+                  >
+                    <Download size={16} />
+                    <span className="hidden lg:inline">Install</span>
+                  </button>
+                )
+              )}
             </div>
 
             <div className="flex items-center gap-1 border-l border-[var(--border-subtle)] pl-4 ml-2">
@@ -455,7 +538,10 @@ export default function App() {
         <div className="flex-none">
           <Toolbar onFormat={handleFormat} activeFormats={activeFormats} />
         </div>
-        <main ref={containerRef} className="flex-1 flex overflow-hidden relative border-t border-[var(--border-subtle)]">
+        <main
+          ref={containerRef}
+          className="flex-1 flex overflow-hidden relative border-t border-[var(--border-subtle)]"
+        >
           {/* Editor Pane (Markdown view) */}
           {(viewMode === "markdown" || viewMode === "split") && (
             <section
@@ -463,9 +549,13 @@ export default function App() {
               className={cn(
                 "flex flex-col h-full bg-[var(--bg-base)] transition-colors duration-300",
                 viewMode === "split" && "flex-none",
-                activeEditor === "markdown" && viewMode === "split" ? "ring-2 ring-[var(--brand-600)]/30 ring-inset" : ""
+                activeEditor === "markdown" && viewMode === "split"
+                  ? "ring-2 ring-[var(--brand-600)]/30 ring-inset"
+                  : "",
               )}
-              onClick={() => viewMode === "split" && setActiveEditor("markdown")}
+              onClick={() =>
+                viewMode === "split" && setActiveEditor("markdown")
+              }
             >
               <div className="flex-1 overflow-hidden relative">
                 <textarea
@@ -489,7 +579,7 @@ export default function App() {
 
           {/* Resizer Handler */}
           {viewMode === "split" && (
-            <div 
+            <div
               className="w-3 mx-[-1.5px] cursor-col-resize flex justify-center items-center z-30 group"
               onMouseDown={() => setIsResizing(true)}
               title="Drag to resize panels"
@@ -501,25 +591,34 @@ export default function App() {
           {/* Format Pane (Preview / WYSIWYG) */}
           {(viewMode === "format" || viewMode === "split") && (
             <section
-              style={{ width: viewMode === "split" ? `${100 - leftWidth}%` : "100%" }}
+              style={{
+                width: viewMode === "split" ? `${100 - leftWidth}%` : "100%",
+              }}
               className={cn(
                 "flex flex-col h-full overflow-y-auto bg-[var(--bg-surface)] backdrop-blur-md transition-colors duration-300 shadow-[-4px_0_24px_rgba(0,0,0,0.04)]",
                 viewMode === "split" && "flex-none",
-                activeEditor === "format" && viewMode === "split" ? "ring-2 ring-[var(--brand-600)]/30 ring-inset" : ""
+                activeEditor === "format" && viewMode === "split"
+                  ? "ring-2 ring-[var(--brand-600)]/30 ring-inset"
+                  : "",
               )}
               onClick={() => viewMode === "split" && setActiveEditor("format")}
             >
-              <div className={cn("p-8 lg:p-12 h-full min-h-[100%] flex-1", viewMode !== "split" && "w-full max-w-4xl mx-auto")}>
-                 <div
-                    ref={formatRef}
-                    className="markdown-body min-h-[50vh] focus:outline-none"
-                    contentEditable
-                    suppressContentEditableWarning
-                    onSelect={handleSelectionChange}
-                    onKeyUp={handleSelectionChange}
-                    onMouseUp={handleSelectionChange}
-                    onInput={syncFormatToMarkdown}
-                 />
+              <div
+                className={cn(
+                  "p-8 lg:p-12 h-full min-h-[100%] flex-1",
+                  viewMode !== "split" && "w-full max-w-4xl mx-auto",
+                )}
+              >
+                <div
+                  ref={formatRef}
+                  className="markdown-body min-h-[50vh] focus:outline-none"
+                  contentEditable
+                  suppressContentEditableWarning
+                  onSelect={handleSelectionChange}
+                  onKeyUp={handleSelectionChange}
+                  onMouseUp={handleSelectionChange}
+                  onInput={syncFormatToMarkdown}
+                />
               </div>
             </section>
           )}
@@ -529,7 +628,9 @@ export default function App() {
         <footer className="flex-none h-9 px-6 flex items-center justify-between bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider z-10 transition-colors duration-300 backdrop-blur-xl">
           <div className="flex space-x-6 items-center">
             <span className="truncate max-w-[200px] flex items-center gap-2 text-[var(--text-strong)]">
-              <span className="w-4 h-4 rounded bg-[var(--brand-600)]/20 text-[var(--brand-600)] flex items-center justify-center">#</span>
+              <span className="w-4 h-4 rounded bg-[var(--brand-600)]/20 text-[var(--brand-600)] flex items-center justify-center">
+                #
+              </span>
               {fileName}
             </span>
             <span>UTF-8</span>
@@ -537,10 +638,12 @@ export default function App() {
           </div>
           <div className="flex items-center space-x-6">
             <span className="flex items-center">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2" /> 
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 mr-2" />
               Local Document
             </span>
-            <span className="font-mono text-[10px] bg-[var(--bg-hover)] px-2 py-0.5 rounded text-[var(--text-strong)] border border-[var(--border-subtle)]">{content.length} chars</span>
+            <span className="font-mono text-[10px] bg-[var(--bg-hover)] px-2 py-0.5 rounded text-[var(--text-strong)] border border-[var(--border-subtle)]">
+              {content.length} chars
+            </span>
           </div>
         </footer>
 
@@ -562,9 +665,7 @@ export default function App() {
               </div>
               <div className="p-8 overflow-y-auto flex-1 bg-[var(--bg-base)]">
                 <div className="markdown-body">
-                  <Markdown remarkPlugins={[remarkGfm]}>
-                    {HELP_MD}
-                  </Markdown>
+                  <Markdown remarkPlugins={[remarkGfm]}>{HELP_MD}</Markdown>
                 </div>
               </div>
               <div className="p-5 border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)] text-right">
@@ -582,9 +683,14 @@ export default function App() {
         {/* Link Modal */}
         {showLinkModal && (
           <div className="fixed inset-0 bg-[#0f172a]/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-in fade-in duration-200">
-            <form onSubmit={submitLink} className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col">
+            <form
+              onSubmit={submitLink}
+              className="bg-[var(--bg-surface)] border border-[var(--border-subtle)] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+            >
               <div className="flex items-center justify-between p-5 border-b border-[var(--border-subtle)] bg-[var(--bg-elevated)]">
-                <h2 className="font-semibold text-[var(--text-strong)]">Insert Link</h2>
+                <h2 className="font-semibold text-[var(--text-strong)]">
+                  Insert Link
+                </h2>
                 <button
                   type="button"
                   onClick={() => setShowLinkModal(false)}
@@ -645,20 +751,24 @@ export default function App() {
               </div>
               <div className="p-6 bg-[var(--bg-base)] text-[var(--text-strong)] space-y-4 text-sm leading-relaxed">
                 <p>
-                  To install MarkFlow as a standalone application, look for the install icon
-                  in your browser's address bar. 
+                  To install MarkFlow as a standalone application, look for the
+                  install icon in your browser's address bar.
                 </p>
                 <div className="bg-[var(--bg-surface)] p-4 rounded-lg border border-[var(--border-subtle)] flex justify-center">
                   <div className="flex bg-[var(--bg-hover)] px-3 py-1.5 rounded-full items-center gap-2 border border-[var(--border-subtle)]">
-                    <span className="text-[10px] text-[var(--text-muted)] font-mono">example.com</span>
+                    <span className="text-[10px] text-[var(--text-muted)] font-mono">
+                      example.com
+                    </span>
                     <Download size={12} className="text-[var(--text-muted)]" />
                   </div>
                 </div>
                 <p>
-                  On iOS Safari, tap the <strong>Share</strong> button and select <strong>Add to Home Screen</strong>.
+                  On iOS Safari, tap the <strong>Share</strong> button and
+                  select <strong>Add to Home Screen</strong>.
                 </p>
                 <p className="text-[var(--text-muted)] text-xs">
-                  Note: If you are viewing this inside an embedded preview, you may need to open the app in a new tab first.
+                  Note: If you are viewing this inside an embedded preview, you
+                  may need to open the app in a new tab first.
                 </p>
               </div>
               <div className="p-4 border-t border-[var(--border-subtle)] bg-[var(--bg-elevated)] flex justify-end">
