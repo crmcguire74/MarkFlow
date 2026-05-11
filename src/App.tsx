@@ -15,6 +15,8 @@ import {
   Layout,
   Columns,
   Code,
+  ChevronRight,
+  ChevronLeft,
 } from "lucide-react";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Markdown from "react-markdown";
@@ -124,6 +126,7 @@ export default function App() {
   } | null>(null);
 
   const [isStandalone, setIsStandalone] = useState(false);
+  const [isControlsExpanded, setIsControlsExpanded] = useState(true);
 
   useEffect(() => {
     setIsStandalone(
@@ -247,10 +250,14 @@ export default function App() {
       const formatBlock = document.queryCommandValue("formatBlock");
       if (formatBlock) {
         const block = formatBlock.toLowerCase();
-        if (block === "h1" || block === "heading 1" || block === "<h1>") formats.push("h1");
-        if (block === "h2" || block === "heading 2" || block === "<h2>") formats.push("h2");
-        if (block === "h3" || block === "heading 3" || block === "<h3>") formats.push("h3");
-        if (block === "blockquote" || block === "<blockquote>") formats.push("quote");
+        if (block === "h1" || block === "heading 1" || block === "<h1>")
+          formats.push("h1");
+        if (block === "h2" || block === "heading 2" || block === "<h2>")
+          formats.push("h2");
+        if (block === "h3" || block === "heading 3" || block === "<h3>")
+          formats.push("h3");
+        if (block === "blockquote" || block === "<blockquote>")
+          formats.push("quote");
       }
 
       setActiveFormats(formats);
@@ -293,7 +300,25 @@ export default function App() {
         document.execCommand("insertUnorderedList", false, undefined);
       else if (format === "ol")
         document.execCommand("insertOrderedList", false, undefined);
-      else if (format.startsWith("h") || format === "quote") {
+      else if (format === "code") {
+        document.execCommand(
+          "insertHTML",
+          false,
+          "<pre><code>console.log('Hello');</code></pre><p><br></p>",
+        );
+      } else if (format === "image") {
+        document.execCommand(
+          "insertImage",
+          false,
+          "https://example.com/image.jpg",
+        );
+      } else if (format === "table") {
+        document.execCommand(
+          "insertHTML",
+          false,
+          "<table border='1'><thead><tr><th>Header 1</th><th>Header 2</th></tr></thead><tbody><tr><td>Cell 1</td><td>Cell 2</td></tr></tbody></table><p><br></p>",
+        );
+      } else if (format.startsWith("h") || format === "quote") {
         const currentBlock = document
           .queryCommandValue("formatBlock")
           ?.toLowerCase();
@@ -302,9 +327,11 @@ export default function App() {
         if (
           currentBlock === targetBlock ||
           currentBlock ===
-            (format === "quote" ? "blockquote" : `heading ${format[1]}`)
+            (format === "quote" ? "blockquote" : `heading ${format[1]}`) ||
+          currentBlock ===
+            (format === "quote" ? "blockquote" : `<h${format[1]}>`)
         ) {
-          document.execCommand("formatBlock", false, "P");
+          document.execCommand("formatBlock", false, "div");
         } else {
           document.execCommand("formatBlock", false, targetBlock.toUpperCase());
         }
@@ -413,129 +440,150 @@ export default function App() {
             <Logo className="h-8 w-auto text-[var(--brand-600)]" />
           </div>
 
-          {/* View Toggles & Actions */}
-          <div className="flex items-center space-x-4">
-            <div className="flex bg-[var(--bg-elevated)] p-1 rounded-lg border border-[var(--border-subtle)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-              <button
-                onClick={() => {
-                  setViewMode("markdown");
-                  setActiveEditor("markdown");
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
-                  viewMode === "markdown"
-                    ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
-                )}
-              >
-                <Code size={14} className="hidden sm:inline-block" /> Markup
-              </button>
-              <button
-                onClick={() => setViewMode("split")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all hidden md:flex",
-                  viewMode === "split"
-                    ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
-                )}
-              >
-                <Columns size={14} className="hidden lg:inline-block" /> Split
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode("format");
-                  setActiveEditor("format");
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
-                  viewMode === "format"
-                    ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
-                    : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
-                )}
-              >
-                <Type size={14} className="hidden sm:inline-block" /> Format
-              </button>
-            </div>
-
-            {/* File Operations */}
-            <div className="flex items-center space-x-1">
-              <button
-                onClick={handleNew}
-                title="New File"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
-              >
-                <FilePlus size={16} />
-                <span className="hidden lg:inline">New</span>
-              </button>
-              <button
-                onClick={handleOpenClick}
-                title="Open File"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
-              >
-                <Upload size={16} />
-                <span className="hidden lg:inline">Open</span>
-              </button>
-              <input
-                type="file"
-                accept=".md,.txt,.markdown"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-              />
-              <button
-                onClick={handleSave}
-                title="Save File"
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
-              >
-                <Save size={16} />
-                <span className="hidden lg:inline">Save</span>
-              </button>
-
-              <div className="h-4 w-[1px] bg-[var(--border-subtle)] mx-2" />
-
-              {needRefresh ? (
+          {/* Header Controls Toggle */}
+          <div className="flex-1 flex justify-end items-center">
+            <div
+              className={cn(
+                "flex items-center space-x-4 transition-all duration-300 origin-right overflow-hidden",
+                isControlsExpanded
+                  ? "opacity-100 max-w-[800px] visible"
+                  : "opacity-0 max-w-0 invisible",
+              )}
+            >
+              <div className="flex bg-[var(--bg-elevated)] p-1 rounded-lg border border-[var(--border-subtle)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                 <button
-                  onClick={() => updateServiceWorker(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-[var(--brand-600)] text-white hover:bg-[var(--brand-700)] transition-colors animate-pulse"
+                  onClick={() => {
+                    setViewMode("markdown");
+                    setActiveEditor("markdown");
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
+                    viewMode === "markdown"
+                      ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
+                  )}
                 >
-                  <Download size={16} />
-                  <span className="hidden lg:inline">Update App</span>
+                  <Code size={14} className="hidden sm:inline-block" /> Markup
                 </button>
-              ) : (
-                !isStandalone && (
+                <button
+                  onClick={() => setViewMode("split")}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all hidden md:flex",
+                    viewMode === "split"
+                      ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
+                  )}
+                >
+                  <Columns size={14} className="hidden lg:inline-block" /> Split
+                </button>
+                <button
+                  onClick={() => {
+                    setViewMode("format");
+                    setActiveEditor("format");
+                  }}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded transition-all",
+                    viewMode === "format"
+                      ? "bg-[var(--bg-surface)] shadow-sm text-[var(--text-strong)] border border-[var(--border-subtle)]"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-strong)] hover:bg-[var(--bg-hover)] border border-transparent",
+                  )}
+                >
+                  <Type size={14} className="hidden sm:inline-block" /> Format
+                </button>
+              </div>
+
+              {/* File Operations */}
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={handleNew}
+                  title="New File"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
+                >
+                  <FilePlus size={16} />
+                  <span className="hidden lg:inline">New</span>
+                </button>
+                <button
+                  onClick={handleOpenClick}
+                  title="Open File"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
+                >
+                  <Upload size={16} />
+                  <span className="hidden lg:inline">Open</span>
+                </button>
+                <input
+                  type="file"
+                  accept=".md,.txt,.markdown"
+                  className="hidden"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                />
+                <button
+                  onClick={handleSave}
+                  title="Save File"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
+                >
+                  <Save size={16} />
+                  <span className="hidden lg:inline">Save</span>
+                </button>
+
+                <div className="h-4 w-[1px] bg-[var(--border-subtle)] mx-2" />
+
+                {needRefresh ? (
                   <button
-                    onClick={() => {
-                      if (deferredPrompt) {
-                        handleInstallClick();
-                      } else {
-                        setShowInstallHelp(true);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--brand-600)] hover:bg-[var(--brand-600)]/10 transition-colors"
+                    onClick={() => updateServiceWorker(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-[var(--brand-600)] text-white hover:bg-[var(--brand-700)] transition-colors animate-pulse"
                   >
                     <Download size={16} />
-                    <span className="hidden lg:inline">Install</span>
+                    <span className="hidden lg:inline">Update App</span>
                   </button>
-                )
-              )}
+                ) : (
+                  !isStandalone && (
+                    <button
+                      onClick={() => {
+                        if (deferredPrompt) {
+                          handleInstallClick();
+                        } else {
+                          setShowInstallHelp(true);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--brand-600)] hover:bg-[var(--brand-600)]/10 transition-colors"
+                    >
+                      <Download size={16} />
+                      <span className="hidden lg:inline">Install</span>
+                    </button>
+                  )
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 border-l border-[var(--border-subtle)] pl-4 ml-2">
+                <button
+                  onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                  title="Toggle Theme"
+                  className="p-2 text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] rounded-full transition-colors"
+                >
+                  {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
+                </button>
+                <button
+                  onClick={() => setShowHelp(true)}
+                  title="Help & Syntax Guide"
+                  className="p-2 text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] rounded-full transition-colors"
+                >
+                  <HelpCircle size={18} />
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center gap-1 border-l border-[var(--border-subtle)] pl-4 ml-2">
-              <button
-                onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-                title="Toggle Theme"
-                className="p-2 text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] rounded-full transition-colors"
-              >
-                {theme === "light" ? <Moon size={18} /> : <Sun size={18} />}
-              </button>
-              <button
-                onClick={() => setShowHelp(true)}
-                title="Help & Syntax Guide"
-                className="p-2 text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] rounded-full transition-colors"
-              >
-                <HelpCircle size={18} />
-              </button>
-            </div>
+            <button
+              onClick={() => setIsControlsExpanded(!isControlsExpanded)}
+              className="p-2 ml-4 text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] rounded-full transition-colors z-30"
+              title={isControlsExpanded ? "Hide Controls" : "Show Controls"}
+            >
+              {isControlsExpanded ? (
+                <ChevronRight size={20} />
+              ) : (
+                <ChevronLeft size={20} />
+              )}
+            </button>
           </div>
         </header>
 
@@ -632,11 +680,18 @@ export default function App() {
         {/* Status Bar */}
         <footer className="flex-none h-9 px-6 flex items-center justify-between bg-[var(--bg-elevated)] border-t border-[var(--border-subtle)] text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider z-10 transition-colors duration-300 backdrop-blur-xl">
           <div className="flex space-x-6 items-center">
-            <span className="truncate max-w-[200px] flex items-center gap-2 text-[var(--text-strong)]">
+            <span className="flex items-center gap-2 text-[var(--text-strong)]">
               <span className="w-4 h-4 rounded bg-[var(--brand-600)]/20 text-[var(--brand-600)] flex items-center justify-center">
                 #
               </span>
-              {fileName}
+              <input
+                type="text"
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                className="bg-transparent border-none outline-none text-[var(--text-strong)] font-semibold w-[150px] focus:ring-1 focus:ring-[var(--brand-600)] px-1 -mx-1 rounded truncate tracking-wider"
+                title="Rename file"
+                spellCheck={false}
+              />
             </span>
             <span>UTF-8</span>
             <span>Markdown</span>
