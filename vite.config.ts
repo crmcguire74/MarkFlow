@@ -12,17 +12,46 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: "autoUpdate",
+        injectRegister: "auto",
         includeAssets: [
           "favicon.ico",
           "icon.svg",
           "apple-touch-icon.png",
           "icon-192.png",
           "icon-512.png",
-          "manifest.json",
         ],
-        manifest: false,
+        manifest: {
+          name: "MarkFlow Editor",
+          short_name: "MarkFlow",
+          description: "Award-winning Markdown Editor",
+          theme_color: "#4f46e5",
+          background_color: "#ffffff",
+          display: "standalone",
+          start_url: "/",
+          icons: [
+            {
+              src: "/icon-192.png",
+              sizes: "192x192",
+              type: "image/png",
+              purpose: "any maskable",
+            },
+            {
+              src: "/icon-512.png",
+              sizes: "512x512",
+              type: "image/png",
+              purpose: "any maskable",
+            },
+            {
+              src: "/icon.svg",
+              sizes: "any",
+              type: "image/svg+xml",
+              purpose: "any",
+            },
+          ],
+        },
         workbox: {
-          globPatterns: ["**/*.{js,css,html,ico,png,svg,json}"],
+          globPatterns: ["**/*.{js,css,html,ico,png,svg,json,webmanifest}"],
+          navigateFallback: "/index.html",
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
