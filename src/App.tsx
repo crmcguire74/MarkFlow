@@ -598,6 +598,32 @@ export default function App() {
     }
   };
 
+  const loadTextFile = useCallback(async (file: File) => {
+    const newContent = await file.text();
+    setFileName(file.name || "untitled.md");
+    setContent(newContent);
+    if (formatRef.current) {
+      formatRef.current.innerHTML = marked.parse(newContent) as string;
+    }
+    setActiveFormats([]);
+  }, []);
+
+  useEffect(() => {
+    if (!window.launchQueue) return;
+
+    window.launchQueue.setConsumer(async (launchParams) => {
+      const fileHandle = launchParams.files?.[0];
+      if (!fileHandle) return;
+
+      try {
+        const file = await fileHandle.getFile();
+        await loadTextFile(file);
+      } catch (error) {
+        console.error("Unable to open launched file", error);
+      }
+    });
+  }, [loadTextFile]);
+
   const handleOpenClick = () => {
     if (fileInputRef.current) fileInputRef.current.click();
   };
@@ -606,17 +632,7 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const newContent = (event.target?.result as string) || "";
-      setContent(newContent);
-      if (formatRef.current) {
-        formatRef.current.innerHTML = marked.parse(newContent) as string;
-      }
-      setActiveFormats([]);
-    };
-    reader.readAsText(file);
+    void loadTextFile(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 

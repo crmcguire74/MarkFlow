@@ -28,6 +28,17 @@ export default defineConfig(({ mode }) => {
           background_color: "#ffffff",
           display: "standalone",
           start_url: "/",
+          scope: "/",
+          file_handlers: [
+            {
+              action: "/",
+              accept: {
+                "text/markdown": [".md", ".markdown"],
+                "text/x-markdown": [".md", ".markdown"],
+                "text/plain": [".txt", ".text"],
+              },
+            },
+          ],
           icons: [
             {
               src: "/icon-192.png",
