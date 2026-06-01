@@ -18,6 +18,7 @@ import {
   Code,
   ChevronRight,
   ChevronLeft,
+  ChevronDown,
 } from "lucide-react";
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import Markdown from "react-markdown";
@@ -121,7 +122,12 @@ export default function App() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const formatRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveMenuRef = useRef<HTMLDivElement>(null);
   const [fileName, setFileName] = useState("untitled.md");
+  const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(
+    null,
+  );
+  const [isSaveMenuOpen, setIsSaveMenuOpen] = useState(false);
 
   // Link & Image Modal State
   const [showLinkModal, setShowLinkModal] = useState(false);
@@ -166,6 +172,20 @@ export default function App() {
     document.documentElement.className = theme;
     localStorage.setItem("theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        saveMenuRef.current &&
+        !saveMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsSaveMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, []);
 
   // PWA Install prompt listener
   useEffect(() => {
@@ -594,13 +614,15 @@ export default function App() {
     if (window.confirm("Are you sure? Unsaved changes will be lost.")) {
       setContent("");
       setFileName("untitled.md");
+      setFileHandle(null);
       if (textareaRef.current) textareaRef.current.focus();
     }
   };
 
-  const loadTextFile = useCallback(async (file: File) => {
+  const loadTextFile = useCallback(async (file: File, handle?: FileSystemFileHandle) => {
     const newContent = await file.text();
     setFileName(file.name || "untitled.md");
+    setFileHandle(handle || null);
     setContent(newContent);
     if (formatRef.current) {
       formatRef.current.innerHTML = marked.parse(newContent) as string;
@@ -617,14 +639,40 @@ export default function App() {
 
       try {
         const file = await fileHandle.getFile();
-        await loadTextFile(file);
+        await loadTextFile(file, fileHandle);
       } catch (error) {
         console.error("Unable to open launched file", error);
       }
     });
   }, [loadTextFile]);
 
-  const handleOpenClick = () => {
+  const handleOpenClick = async () => {
+    if (window.showOpenFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          multiple: false,
+          types: [
+            {
+              description: "Markdown files",
+              accept: {
+                "text/markdown": [".md", ".markdown"],
+                "text/plain": [".txt"],
+              },
+            },
+          ],
+        });
+
+        const file = await handle.getFile();
+        await loadTextFile(file, handle);
+        return;
+      } catch (error) {
+        if ((error as DOMException).name !== "AbortError") {
+          console.error("Unable to open file", error);
+        }
+        return;
+      }
+    }
+
     if (fileInputRef.current) fileInputRef.current.click();
   };
 
@@ -636,7 +684,7 @@ export default function App() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleSave = () => {
+  const downloadFile = () => {
     const blob = new Blob([content], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -646,6 +694,61 @@ export default function App() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const writeFile = async (handle: FileSystemFileHandle) => {
+    const writable = await handle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  };
+
+  const handleSaveAs = async () => {
+    setIsSaveMenuOpen(false);
+
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: fileName,
+          types: [
+            {
+              description: "Markdown files",
+              accept: {
+                "text/markdown": [".md", ".markdown"],
+                "text/plain": [".txt"],
+              },
+            },
+          ],
+        });
+
+        await writeFile(handle);
+        setFileHandle(handle);
+        const file = await handle.getFile();
+        setFileName(file.name || fileName);
+        return;
+      } catch (error) {
+        if ((error as DOMException).name !== "AbortError") {
+          console.error("Unable to save file", error);
+        }
+        return;
+      }
+    }
+
+    downloadFile();
+  };
+
+  const handleSave = async () => {
+    setIsSaveMenuOpen(false);
+
+    if (fileHandle) {
+      try {
+        await writeFile(fileHandle);
+        return;
+      } catch (error) {
+        console.error("Unable to overwrite file", error);
+      }
+    }
+
+    await handleSaveAs();
   };
 
   return (
@@ -658,8 +761,17 @@ export default function App() {
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
         <header className="flex-none h-16 px-6 border-b border-[var(--border-subtle)] bg-[var(--bg-surface)] backdrop-blur-md flex items-center justify-between z-20 shadow-sm transition-colors duration-300">
-          <div className="flex items-center">
-            <Logo className="h-8 w-auto text-[var(--brand-600)]" />
+          <div className="flex min-w-0 items-center">
+            {isStandalone ? (
+              <h1
+                className="max-w-[32vw] truncate text-sm font-semibold text-[var(--text-strong)] sm:max-w-[42vw]"
+                title={fileName}
+              >
+                {fileName}
+              </h1>
+            ) : (
+              <Logo className="h-8 w-auto text-[var(--brand-600)]" />
+            )}
           </div>
 
           {/* Header Controls Toggle */}
@@ -739,14 +851,50 @@ export default function App() {
                   ref={fileInputRef}
                   onChange={handleFileChange}
                 />
-                <button
-                  onClick={handleSave}
-                  title="Save File"
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md text-[var(--text-muted)] hover:text-[var(--brand-600)] hover:bg-[var(--bg-hover)] active:bg-[var(--border-subtle)] transition-colors"
-                >
-                  <Save size={16} />
-                  <span className="hidden lg:inline">Save</span>
-                </button>
+                <div ref={saveMenuRef} className="relative flex">
+                  <button
+                    onClick={handleSave}
+                    title="Save File"
+                    className="flex items-center gap-1.5 rounded-l-md px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--brand-600)] active:bg-[var(--border-subtle)]"
+                  >
+                    <Save size={16} />
+                    <span className="hidden lg:inline">Save</span>
+                  </button>
+                  <button
+                    onClick={() => setIsSaveMenuOpen((open) => !open)}
+                    title="Save Options"
+                    aria-haspopup="menu"
+                    aria-expanded={isSaveMenuOpen}
+                    className="flex items-center rounded-r-md border-l border-[var(--border-subtle)] px-1.5 py-1.5 text-[var(--text-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--brand-600)] active:bg-[var(--border-subtle)]"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                  {isSaveMenuOpen && (
+                    <div
+                      role="menu"
+                      className="absolute right-0 top-full z-40 mt-2 min-w-36 overflow-hidden rounded-md border border-[var(--border-subtle)] bg-[var(--bg-surface)] py-1 shadow-lg"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleSave}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--text-strong)] transition-colors hover:bg-[var(--bg-hover)]"
+                      >
+                        <Save size={15} />
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={handleSaveAs}
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm font-medium text-[var(--text-strong)] transition-colors hover:bg-[var(--bg-hover)]"
+                      >
+                        <FilePlus size={15} />
+                        Save As
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => window.print()}
                   title="Print"
