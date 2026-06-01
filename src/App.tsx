@@ -143,6 +143,7 @@ export default function App() {
 
   const [isStandalone, setIsStandalone] = useState(false);
   const [isControlsExpanded, setIsControlsExpanded] = useState(true);
+  const headerFileName = fileHandle?.name || fileName;
 
   useEffect(() => {
     setIsStandalone(
@@ -621,7 +622,7 @@ export default function App() {
 
   const loadTextFile = useCallback(async (file: File, handle?: FileSystemFileHandle) => {
     const newContent = await file.text();
-    setFileName(file.name || "untitled.md");
+    setFileName(handle?.name || file.name || "untitled.md");
     setFileHandle(handle || null);
     setContent(newContent);
     if (formatRef.current) {
@@ -722,8 +723,7 @@ export default function App() {
 
         await writeFile(handle);
         setFileHandle(handle);
-        const file = await handle.getFile();
-        setFileName(file.name || fileName);
+        setFileName(handle.name || fileName);
         return;
       } catch (error) {
         if ((error as DOMException).name !== "AbortError") {
@@ -765,9 +765,9 @@ export default function App() {
             {isStandalone ? (
               <h1
                 className="max-w-[32vw] truncate text-sm font-semibold text-[var(--text-strong)] sm:max-w-[42vw]"
-                title={fileName}
+                title={headerFileName}
               >
-                {fileName}
+                {headerFileName}
               </h1>
             ) : (
               <Logo className="h-8 w-auto text-[var(--brand-600)]" />
@@ -778,10 +778,10 @@ export default function App() {
           <div className="flex-1 flex justify-end items-center">
             <div
               className={cn(
-                "flex items-center space-x-4 transition-all duration-300 origin-right overflow-hidden",
+                "flex items-center space-x-4 transition-all duration-300 origin-right",
                 isControlsExpanded
-                  ? "opacity-100 max-w-[800px] visible"
-                  : "opacity-0 max-w-0 invisible",
+                  ? "opacity-100 max-w-[800px] visible overflow-visible"
+                  : "opacity-0 max-w-0 invisible overflow-hidden",
               )}
             >
               <div className="flex bg-[var(--bg-elevated)] p-1 rounded-lg border border-[var(--border-subtle)] shadow-[0_1px_2px_rgba(0,0,0,0.05)]">

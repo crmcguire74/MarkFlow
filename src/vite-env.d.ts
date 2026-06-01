@@ -24,6 +24,7 @@ interface FileSystemWritableFileStream extends WritableStream {
 }
 
 interface FileSystemFileHandle {
+  name: string;
   getFile(): Promise<File>;
   createWritable(): Promise<FileSystemWritableFileStream>;
 }
